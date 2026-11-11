@@ -84,5 +84,9 @@ The generator injects these on purpose, so the pipeline has real work to do. Rat
 |---|---|---|
 | Duplicates | ~1 % | The same event is sent twice with the same `event_id`. |
 | Late events | ~3 % | `received_at` arrives up to 3 days after `event_time`, like a player coming back online. |
-| Missing fields | ~2 % | `country` or `device_model` is absent. |
-| Schema change | from `app_version` 1.3.0 | `milestone` is renamed `milestone_id`, and `duration_s` becomes `duration_ms`. Both forms must be handled. |
+| Missing fields | ~2 % of the events that carry them | `country` or `device_model` is absent. |
+| Schema change | from `app_version` 1.3.0 | `schema_version` becomes 2, `milestone` is renamed `milestone_id`, and `duration_s` becomes `duration_ms`. Both forms must be handled. Only players who updated send the new form, so both coexist after the release. |
+
+## Files
+
+The generator writes one JSONL file per day of arrival (`received_at`), in `data/raw_events/`. A late event therefore lands in a later file than the day it happened, which is what a daily load sees in real life.
