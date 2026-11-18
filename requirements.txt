@@ -1,0 +1,4 @@
+# Python packages for the dbt project (Python 3.14).
+# The event generator only uses the standard library.
+dbt-core==1.12.7
+dbt-postgres==1.11.0
