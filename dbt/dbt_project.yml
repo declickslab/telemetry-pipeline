@@ -1,0 +1,24 @@
+name: telemetry
+version: "1.0.0"
+config-version: 2
+
+profile: telemetry
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+clean-targets:
+  - target
+  - dbt_packages
+
+# Models are built in the "dbt" family of schemas (dbt_staging, dbt_marts),
+# next to the hand-written raw, staging and marts schemas, so both can be compared.
+models:
+  telemetry:
+    staging:
+      +materialized: table
+      +schema: staging
+    marts:
+      +materialized: table
+      +schema: marts

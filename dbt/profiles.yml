@@ -1,0 +1,14 @@
+# Connection to the local Postgres 17 from compose.yaml.
+# The password is read from the POSTGRES_PASSWORD environment variable, never written here.
+telemetry:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      port: 5432
+      user: telemetry
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: telemetry
+      schema: dbt
+      threads: 4
