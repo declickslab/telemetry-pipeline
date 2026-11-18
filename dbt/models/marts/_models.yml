@@ -1,0 +1,96 @@
+version: 2
+
+models:
+  - name: sessions
+    description: One row per game session, built from its session_start and session_end events.
+    columns:
+      - name: session_id
+        description: Unique id of the session.
+        data_tests:
+          - unique
+          - not_null
+      - name: player_id
+        description: Player who played the session.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_events')
+                field: player_id
+      - name: started_at
+        description: When the session started (UTC).
+        data_tests:
+          - not_null
+      - name: ended_at
+        description: When the session ended (UTC).
+        data_tests:
+          - not_null
+      - name: reason
+        description: Why the session ended.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['quit', 'crash']
+      - name: event_count
+        description: Number of events in the session, including start and end.
+        data_tests:
+          - not_null
+
+  - name: daily_active_players
+    description: Number of players who started at least one session, per day (UTC).
+    columns:
+      - name: day
+        description: Calendar day in UTC.
+        data_tests:
+          - unique
+          - not_null
+      - name: active_players
+        description: Distinct players with a session that day.
+        data_tests:
+          - not_null
+
+  - name: milestone_funnel
+    description: How many players reached each milestone, in funnel order.
+    columns:
+      - name: milestone_id
+        description: Milestone reached.
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['tutorial_completed', 'cleared_level_1', 'cleared_level_2', 'cleared_level_3', 'cleared_level_4', 'cleared_level_5', 'boss_defeated', 'credits_ended']
+      - name: players
+        description: Distinct players who reached the milestone.
+        data_tests:
+          - not_null
+      - name: pct_of_registered
+        description: Players who reached the milestone, as a percentage of all registered players.
+
+  - name: retention
+    description: Day-1 and day-7 retention for each signup day. Left empty when the data does not cover that day yet.
+    columns:
+      - name: signup_day
+        description: Day the cohort registered (UTC).
+        data_tests:
+          - unique
+          - not_null
+      - name: cohort_size
+        description: Players who registered that day.
+        data_tests:
+          - not_null
+      - name: d1_pct
+        description: Percentage of the cohort that played the next day.
+      - name: d7_pct
+        description: Percentage of the cohort that played 7 days after signup.
+
+  - name: app_version_health
+    description: Sessions, crashes and average session length for each app version.
+    columns:
+      - name: app_version
+        description: Version of the game build.
+        data_tests:
+          - unique
+          - not_null
+      - name: crash_rate_pct
+        description: Share of sessions that ended in a crash, in percent.

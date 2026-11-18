@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: stg_events
+    description: >
+      One row per event, deduplicated (first received copy kept), with typed
+      columns and both app formats merged into one set of columns.
+    columns:
+      - name: event_id
+        description: Unique id of the event.
+        data_tests:
+          - unique
+          - not_null
+      - name: event_type
+        description: Type of the event.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['player_registered', 'session_start', 'milestone_reached', 'session_end']
+      - name: player_id
+        description: Stable id of the player.
+        data_tests:
+          - not_null
+      - name: platform
+        description: Platform the game runs on.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['pc', 'console']
+      - name: schema_version
+        description: Version of the payload format sent by the app.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2]
+                quote: false
+      - name: event_time
+        description: When the event happened on the player's device (UTC).
+        data_tests:
+          - not_null
+      - name: received_at
+        description: When the server received the event (UTC).
+        data_tests:
+          - not_null
+      - name: milestone_id
+        description: Milestone reached, from schema v1 "milestone" or v2 "milestone_id". Only set on milestone_reached events.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['tutorial_completed', 'cleared_level_1', 'cleared_level_2', 'cleared_level_3', 'cleared_level_4', 'cleared_level_5', 'boss_defeated', 'credits_ended']
+      - name: duration_ms
+        description: Session length in milliseconds, converted from seconds for schema v1. Only set on session_end events.
+      - name: reason
+        description: Why the session ended. Only set on session_end events.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['quit', 'crash']
+      - name: country
+        description: Country of the player. Missing on about 2 percent of player_registered events.
+      - name: device_model
+        description: Device model. Missing on about 2 percent of session_start events.
