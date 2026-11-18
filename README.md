@@ -1,0 +1,87 @@
+# Game telemetry pipeline
+
+A small data pipeline for game telemetry (PC and console), built end to end on a laptop:
+a Python event generator, raw storage in Postgres, and cleaning and analysis models in dbt, with automated tests.
+
+The data is **synthetic**. The generator produces about 1.1 million events for 100,000 players over 30 days, and it injects the kind of mess real telemetry has: duplicate events, late events, missing fields, and an app update that renamed fields halfway through.
+
+## What it answers
+
+| Model | Question |
+|---|---|
+| `daily_active_players` | How many players started a session each day? |
+| `milestone_funnel` | How many players reach each milestone, from the tutorial to the credits? |
+| `sessions` | What does each play session look like (length, number of events, how it ended)? |
+| `retention` | What share of each signup cohort comes back on day 1 and day 7? |
+| `app_version_health` | How do crash rate and session length compare between app versions? |
+
+## Pipeline
+
+```
+generator (Python)  ->  raw.events (Postgres, jsonb)  ->  stg_events (dbt)  ->  5 analysis models (dbt)
+   JSONL files            events kept as received          clean, typed            marts, with tests
+```
+
+1. **Generate.** `generator/generate_events.py` writes one JSONL file per day of arrival. The same seed always gives the same files.
+2. **Load.** `scripts/load_raw.sh` loads every file as-is into `raw.events`, one `jsonb` value per event.
+3. **Clean.** The `stg_events` model keeps one row per `event_id` (the first received copy), converts types, and merges the two app formats into one set of columns (`milestone` and `milestone_id`, seconds and milliseconds).
+4. **Analyse.** Five models build the tables above from `stg_events`.
+5. **Test.** 32 dbt tests check uniqueness, missing values, accepted values, relationships between tables, and that no session ends before it starts.
+
+## Results on the generated data
+
+- 1,108,524 raw events become 1,097,789 clean events. The 10,735 removed rows are exactly the duplicates.
+- 33,523 events (about 3 percent) arrived more than an hour late. They are kept, with both `event_time` and `received_at`.
+- 358,489 sessions. About 3 percent end in a crash, with almost the same rate on both app versions (2.97 and 3.05 percent).
+- Retention is about 40 percent on day 1 and about 20 percent on day 7.
+- Only 5 percent of registered players reach the credits.
+
+## Run it
+
+You need Docker, Python 3.14 and Git. The commands run from the repository root.
+
+```bash
+# 1. Database password (any value you like), then start Postgres 17
+echo "POSTGRES_PASSWORD=choose-a-password" > .env
+docker compose up -d
+
+# 2. Create the schemas and the raw table
+docker compose exec -T postgres psql -U telemetry -d telemetry < sql/00_setup.sql
+
+# 3. Python environment and generated data (about 1.1 million events)
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python generator/generate_events.py --seed 42
+
+# 4. Load the raw events
+bash scripts/load_raw.sh
+
+# 5. Build the models and run the tests
+set -a; source .env; set +a
+cd dbt
+dbt build
+```
+
+`dbt build` creates the models in the schemas `dbt_staging` and `dbt_marts`, then runs the 32 tests.
+
+## Repository layout
+
+| Path | Content |
+|---|---|
+| `generator/` | The event generator |
+| `docs/events.md` | Event schema, milestones, and the deliberate data quality problems |
+| `scripts/load_raw.sh` | Loads the JSONL files into Postgres |
+| `sql/` | First version of the pipeline as plain SQL files (see below) |
+| `dbt/` | The dbt project: sources, models, tests |
+| `compose.yaml` | Postgres 17 |
+
+The `sql/` folder is the first, hand-run version of the pipeline. The dbt models reproduce its tables exactly: each dbt table was compared row by row with its plain SQL twin, with no difference. `sql/10_quality_checks.sql` prints the row counts before and after cleaning.
+
+## Stack
+
+Python, PostgreSQL 17, Docker Compose, dbt Core 1.12 with the Postgres adapter.
+
+## Next
+
+An Airflow DAG that loads one simulated day at a time, and a run of the same models on Snowflake.
