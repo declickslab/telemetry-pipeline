@@ -1,0 +1,7 @@
+# Airflow image with dbt added. dbt lives in its own virtualenv so its
+# dependencies never clash with Airflow's.
+FROM apache/airflow:3.4.0
+
+COPY --chown=airflow:0 requirements.txt /tmp/requirements.txt
+RUN python -m venv /home/airflow/dbt-venv \
+ && /home/airflow/dbt-venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt
