@@ -23,7 +23,7 @@ generator (Python)  ->  raw.events (Postgres, jsonb)  ->  stg_events (dbt)  ->  
 ```
 
 1. **Generate.** `generator/generate_events.py` writes one JSONL file per day of arrival. The same seed always gives the same files.
-2. **Load.** `scripts/load_raw.sh` loads every file as-is into `raw.events`, one `jsonb` value per event.
+2. **Load.** `scripts/load_raw.sh` loads every file as-is into `raw.events`, one `jsonb` value per event, one day at a time. Each row keeps the name of its source file, so a day can be reloaded without creating duplicates.
 3. **Clean.** The `stg_events` model keeps one row per `event_id` (the first received copy), converts types, and merges the two app formats into one set of columns (`milestone` and `milestone_id`, seconds and milliseconds).
 4. **Analyse.** Five models build the tables above from `stg_events`.
 5. **Test.** 32 dbt tests check uniqueness, missing values, accepted values, relationships between tables, and that no session ends before it starts.
@@ -65,23 +65,47 @@ dbt build
 
 `dbt build` creates the models in the schemas `dbt_staging` and `dbt_marts`, then runs the 32 tests.
 
+## Daily run with Airflow
+
+The DAG `telemetry_daily` (`dags/telemetry_daily.py`) plays one simulated day per run: it loads that day's file into `raw.events`, then runs `dbt build` (models and tests).
+
+- It catches up three days in a row (1 to 3 October 2026), one at a time.
+- Loading a day replaces its rows instead of adding to them, so a run can be repeated safely: after replaying one day, `raw.events` kept exactly the same number of rows.
+- If the load fails, it is retried once. If it fails again, `dbt_build` does not start. After fixing the cause, clearing only the failed task resumes the chain.
+- Limits: the days are simulated (the files are generated up front), and dbt rebuilds every table on each run instead of processing only new data.
+
+```bash
+# Once: your user id for Airflow, and its metadata database
+echo "AIRFLOW_UID=$(id -u)" >> .env
+docker compose exec -T postgres psql -U telemetry -d telemetry -c "CREATE DATABASE airflow"
+
+# Build the image, initialise, start
+docker compose -f compose.yaml -f compose.airflow.yaml build
+docker compose -f compose.yaml -f compose.airflow.yaml up airflow-init
+docker compose -f compose.yaml -f compose.airflow.yaml up -d
+```
+
+Open http://localhost:8080 (user `airflow`, password `airflow`, reachable from your machine only), then switch the DAG on. The data must be generated first (steps 1 to 3 above).
+
 ## Repository layout
 
 | Path | Content |
 |---|---|
 | `generator/` | The event generator |
 | `docs/events.md` | Event schema, milestones, and the deliberate data quality problems |
-| `scripts/load_raw.sh` | Loads the JSONL files into Postgres |
+| `scripts/` | `load_raw.sh` loads all days, `load_day.sh` loads one day (safe to repeat) |
+| `dags/` | The Airflow DAG that runs the pipeline daily |
 | `sql/` | First version of the pipeline as plain SQL files (see below) |
 | `dbt/` | The dbt project: sources, models, tests |
 | `compose.yaml` | Postgres 17 |
+| `compose.airflow.yaml`, `Dockerfile.airflow` | Airflow 3.4 with dbt, added on top of `compose.yaml` |
 
 The `sql/` folder is the first, hand-run version of the pipeline. The dbt models reproduce its tables exactly: each dbt table was compared row by row with its plain SQL twin, with no difference. `sql/10_quality_checks.sql` prints the row counts before and after cleaning.
 
 ## Stack
 
-Python, PostgreSQL 17, Docker Compose, dbt Core 1.12 with the Postgres adapter.
+Python, PostgreSQL 17, Docker Compose, dbt Core 1.12 with the Postgres adapter, Apache Airflow 3.4.
 
 ## Next
 
-An Airflow DAG that loads one simulated day at a time, and a run of the same models on Snowflake.
+A run of the same models on Snowflake.
