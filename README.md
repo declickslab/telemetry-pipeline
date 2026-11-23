@@ -17,9 +17,16 @@ The data is **synthetic**. The generator produces about 1.1 million events for 1
 
 ## Pipeline
 
-```
-generator (Python)  ->  raw.events (Postgres, jsonb)  ->  stg_events (dbt)  ->  5 analysis models (dbt)
-   JSONL files            events kept as received          clean, typed            marts, with tests
+```mermaid
+flowchart LR
+    G["Generator<br/>Python"] -->|"one JSONL file per day"| L["Load<br/>scripts/load_day.sh<br/>or Airflow task"]
+    L -->|"events as received"| R[("raw.events<br/>Postgres, jsonb")]
+    R --> S["stg_events<br/>dbt: dedupe, type, merge formats"]
+    S --> M["5 analysis models<br/>dbt marts"]
+    T{{"32 dbt tests"}} -.-> S
+    T -.-> M
+    A["Airflow DAG<br/>telemetry_daily"] -.->|"runs each day"| L
+    A -.->|"then runs"| S
 ```
 
 1. **Generate.** `generator/generate_events.py` writes one JSONL file per day of arrival. The same seed always gives the same files.
@@ -27,6 +34,16 @@ generator (Python)  ->  raw.events (Postgres, jsonb)  ->  stg_events (dbt)  ->  
 3. **Clean.** The `stg_events` model keeps one row per `event_id` (the first received copy), converts types, and merges the two app formats into one set of columns (`milestone` and `milestone_id`, seconds and milliseconds).
 4. **Analyse.** Five models build the tables above from `stg_events`.
 5. **Test.** 32 dbt tests check uniqueness, missing values, accepted values, relationships between tables, and that no session ends before it starts.
+
+## Design decisions
+
+- **Keep the raw data untouched.** Events are stored as received, one `jsonb` value each. Cleaning happens in dbt, so a wrong rule can be fixed and replayed without reloading anything.
+- **Deduplicate with `ROW_NUMBER`.** For each `event_id`, the first received copy is kept. This is plain standard SQL, which keeps the models portable to another engine.
+- **Everything in UTC.** Timestamps are stored and compared in UTC. Local time zones are a display concern, not a storage one.
+- **Two app formats, one set of columns.** An update renamed fields halfway through the 30 days. The staging model merges both formats (`milestone` and `milestone_id`, seconds and milliseconds), so the analysis models never see the difference.
+- **Late events are kept.** Both `event_time` (when it happened) and `received_at` (when it arrived) are stored, so lateness can be measured instead of hidden.
+- **Idempotent loading.** Each row remembers its source file. Loading a day deletes that file's rows and reinserts them in one transaction, so a retry never duplicates data.
+- **Tests as contracts.** Uniqueness, missing values, accepted values, relationships, and "no session ends before it starts" are tested on every `dbt build`.
 
 ## Results on the generated data
 
