@@ -1,5 +1,7 @@
 # Game telemetry pipeline
 
+[![dbt build](https://github.com/declickslab/telemetry-pipeline/actions/workflows/dbt-build.yml/badge.svg)](https://github.com/declickslab/telemetry-pipeline/actions/workflows/dbt-build.yml)
+
 A small data pipeline for game telemetry (PC and console), built end to end on a laptop:
 a Python event generator, raw storage in Postgres, and cleaning and analysis models in dbt, with automated tests.
 
@@ -81,6 +83,10 @@ dbt build
 ```
 
 `dbt build` creates the models in the schemas `dbt_staging` and `dbt_marts`, then runs the 32 tests.
+
+## Automated check
+
+On every push and pull request, GitHub Actions (`.github/workflows/dbt-build.yml`) replays the steps above on a clean machine: it starts Postgres 17, creates the schemas, generates a small dataset (2,000 players, 30 days), loads it and runs `dbt build` with all the tests. It takes about a minute. It uses a smaller dataset than the full 100,000 players to stay fast, so it checks that the pipeline works, not the figures in the results section.
 
 ## Daily run with Airflow
 
