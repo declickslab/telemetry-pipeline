@@ -1,0 +1,49 @@
+# Replays the "Run it" steps of the README on a clean machine, with a small
+# generated dataset: start Postgres, load the raw events, run `dbt build`.
+name: dbt build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Throwaway password for a database that only lives during this job.
+      POSTGRES_PASSWORD: ci-only-password
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Start Postgres 17
+        run: |
+          echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" > .env
+          docker compose up -d
+          # Wait until the database accepts connections
+          for i in $(seq 1 30); do
+            docker compose exec -T postgres pg_isready -U telemetry -d telemetry && break
+            sleep 2
+          done
+
+      - name: Create schemas and raw table
+        run: docker compose exec -T postgres psql -U telemetry -d telemetry -v ON_ERROR_STOP=1 < sql/00_setup.sql
+
+      - name: Generate a small dataset (2,000 players, 30 days)
+        run: python generator/generate_events.py --seed 42 --players 2000
+
+      - name: Load raw events
+        run: bash scripts/load_raw.sh
+
+      - name: Install dbt
+        run: pip install -r requirements.txt
+
+      - name: dbt build (models and tests)
+        working-directory: dbt
+        run: dbt build
