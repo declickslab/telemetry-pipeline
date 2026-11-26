@@ -110,13 +110,44 @@ docker compose -f compose.yaml -f compose.airflow.yaml up -d
 
 Open http://localhost:8080 (user `airflow`, password `airflow`, reachable from your machine only), then switch the DAG on. The data must be generated first (steps 1 to 3 above).
 
+## Same models on Snowflake
+
+The dbt models also run on Snowflake, from the same code: `dbt build --target snowflake` builds the 6 models and passes the 32 tests. `scripts/compare_engines.py` then checks that both engines agree: the four small analysis tables are compared row by row, and `stg_events` and `sessions` through counts, sums and date ranges. All six matched on the full dataset.
+
+| | Postgres | Snowflake |
+|---|---|---|
+| Raw event column | `jsonb` | `VARIANT` |
+| Reading a JSON key | `data -> 'payload' ->> 'reason'` | `data:payload.reason::string` |
+| Timestamps | `timestamptz` | `timestamp_ntz`, always holding UTC |
+| Calendar day in UTC | `(t at time zone 'UTC')::date` | `t::date` |
+| Loading a file | `COPY ... FROM STDIN` | `PUT` to a stage, then `COPY INTO` |
+
+The first three differences in the models are isolated in `dbt/macros/cross_db.sql`, so there is a single set of models. `count(*) filter (where ...)`, which Snowflake lacks, was replaced by `count(case when ...)`, which works on both.
+
+```bash
+# Once: run sql/snowflake/00_setup.sql in a Snowflake worksheet, and register a public key
+# for your user (ALTER USER ... SET RSA_PUBLIC_KEY). Then add to .env:
+#   SNOWFLAKE_ACCOUNT=<organisation>-<account>
+#   SNOWFLAKE_USER=<user>
+#   SNOWFLAKE_PRIVATE_KEY_PATH=<path to the private key, outside the repository>
+python3 -m venv .venv-snowflake
+.venv-snowflake/bin/pip install -r requirements-snowflake.txt
+set -a; source .env; set +a
+.venv-snowflake/bin/python scripts/load_snowflake.py
+(cd dbt && ../.venv-snowflake/bin/dbt build --target snowflake)
+# After a Postgres `dbt build` on the same files:
+.venv-snowflake/bin/python scripts/compare_engines.py
+```
+
+Limits: this was done on a trial account with the `ACCOUNTADMIN` role, which a real project would replace with a restricted role. About 1.1 million events do not need Snowflake; the point is that the pipeline is portable. The Airflow DAG and the CI check run on Postgres only.
+
 ## Repository layout
 
 | Path | Content |
 |---|---|
 | `generator/` | The event generator |
 | `docs/events.md` | Event schema, milestones, and the deliberate data quality problems |
-| `scripts/` | `load_raw.sh` loads all days, `load_day.sh` loads one day (safe to repeat) |
+| `scripts/` | `load_raw.sh` loads all days, `load_day.sh` loads one day (safe to repeat), `load_snowflake.py` loads Snowflake, `compare_engines.py` compares both engines |
 | `dags/` | The Airflow DAG that runs the pipeline daily |
 | `sql/` | First version of the pipeline as plain SQL files (see below) |
 | `dbt/` | The dbt project: sources, models, tests |
@@ -127,8 +158,4 @@ The `sql/` folder is the first, hand-run version of the pipeline. The dbt models
 
 ## Stack
 
-Python, PostgreSQL 17, Docker Compose, dbt Core 1.12 with the Postgres adapter, Apache Airflow 3.4.
-
-## Next
-
-A run of the same models on Snowflake.
+Python, PostgreSQL 17, Docker Compose, dbt Core 1.12 with the Postgres and Snowflake adapters, Apache Airflow 3.4, Snowflake, GitHub Actions.

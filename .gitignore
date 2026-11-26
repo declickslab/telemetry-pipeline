@@ -2,6 +2,7 @@
 .scratch/
 data/
 .venv/
+.venv-snowflake/
 dbt/target/
 dbt/logs/
 dbt/dbt_packages/

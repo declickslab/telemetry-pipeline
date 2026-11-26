@@ -3,13 +3,13 @@
 -- after signup. Days are cut in UTC.
 -- A value is left NULL when the data does not yet cover that day.
 with signups as (
-  select player_id, (event_time at time zone 'UTC')::date as signup_day
+  select player_id, {{ utc_date('event_time') }} as signup_day
   from {{ ref('stg_events') }}
   where event_type = 'player_registered'
 ),
 
 active_days as (
-  select distinct player_id, (started_at at time zone 'UTC')::date as active_day
+  select distinct player_id, {{ utc_date('started_at') }} as active_day
   from {{ ref('sessions') }}
 )
 

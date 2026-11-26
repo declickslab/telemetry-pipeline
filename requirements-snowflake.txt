@@ -1,0 +1,6 @@
+# Packages for the Snowflake run, installed in their own environment (.venv-snowflake),
+# so the Postgres setup stays untouched.
+dbt-core==1.12.7
+dbt-snowflake==1.12.5
+# Used by scripts/compare_engines.py to read the Postgres results.
+psycopg[binary]==3.3.9

@@ -2,8 +2,8 @@ version: 2
 
 sources:
   - name: raw
-    description: Raw game events, loaded as-is from the JSONL files by scripts/load_raw.sh.
+    description: Raw game events, loaded as-is from the JSONL files (scripts/load_raw.sh on Postgres, scripts/load_snowflake.py on Snowflake).
     schema: raw
     tables:
       - name: events
-        description: One row per received event, including duplicates. The event is kept whole in the jsonb column "data".
+        description: One row per received event, including duplicates. The event is kept whole in the column "data" (jsonb on Postgres, VARIANT on Snowflake).

@@ -3,8 +3,8 @@
 select
   app_version,
   count(*)                                                              as sessions,
-  count(*) filter (where reason = 'crash')                              as crashes,
-  round(100.0 * count(*) filter (where reason = 'crash') / count(*), 2) as crash_rate_pct,
+  count(case when reason = 'crash' then 1 end)                          as crashes,
+  round(100.0 * count(case when reason = 'crash' then 1 end) / count(*), 2) as crash_rate_pct,
   round(avg(duration_ms) / 1000)                                        as avg_session_seconds
 from {{ ref('sessions') }}
 group by app_version
