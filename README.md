@@ -114,6 +114,8 @@ Open http://localhost:8080 (user `airflow`, password `airflow`, reachable from y
 
 The dbt models also run on Snowflake, from the same code: `dbt build --target snowflake` builds the 6 models and passes the 32 tests. `scripts/compare_engines.py` then checks that both engines agree: the four small analysis tables are compared row by row, and `stg_events` and `sessions` through counts, sums and date ranges. All six matched on the full dataset.
 
+![Row counts of the raw table and the dbt models on Snowflake](docs/img/snowflake-row-counts.png)
+
 | | Postgres | Snowflake |
 |---|---|---|
 | Raw event column | `jsonb` | `VARIANT` |
